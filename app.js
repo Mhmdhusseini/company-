@@ -1,4 +1,4 @@
-// === Firebase Config (غيّر دي بتاعتك) ===
+// === Firebase Config (غيّرها بـ config بتاعك من Firebase) ===
 const firebaseConfig = {
   apiKey: "AIzaSyxxxxxxxxxxxxxxxxxxxxxxxxxx",
   authDomain: "company-elevators.firebaseapp.com",
@@ -24,12 +24,12 @@ let editIndex = -1;
 // تحميل المنتجات من Firebase
 function loadFromFirebase() {
     productsRef.on("value", (snapshot) => {
-        allProducts = snapshot.val() || [];
-        // تحويل Object إلى Array
-        allProducts = Object.keys(allProducts).map(key => ({
+        const data = snapshot.val();
+        allProducts = data ? Object.keys(data).map(key => ({
             id: key,
-            ...allProducts[key]
-        }));
+            ...data[key]
+        })) : [];
+
         if (document.getElementById("product-list")) {
             filteredProducts = allProducts;
             renderProducts(filteredProducts, 1);
@@ -43,8 +43,8 @@ function loadFromFirebase() {
 // حفظ في Firebase
 function saveToFirebase() {
     const plainObj = {};
-    allProducts.forEach((p, i) => {
-        plainObj[p.id || i] = { name: p.name, image: p.image, desc: p.desc, price: p.price };
+    allProducts.forEach(p => {
+        plainObj[p.id] = { name: p.name, image: p.image, desc: p.desc, price: p.price };
     });
     productsRef.set(plainObj);
 }
@@ -62,7 +62,7 @@ function initHome() {
     const searchInput = document.getElementById("search");
     searchInput.addEventListener("input", () => {
         const q = searchInput.value.toLowerCase();
-        filteredProducts = allProducts.filter(p => 
+        filteredProducts = allProducts.filter(p =>
             p.name.toLowerCase().includes(q) || (p.desc && p.desc.toLowerCase().includes(q))
         );
         currentPage = 1;
@@ -96,7 +96,9 @@ function renderProducts(items, page) {
 
     // Pagination
     const totalPages = Math.ceil(items.length / perPage);
-    if (totalPages <= 1) { pagination.innerHTML = ''; return; }
+    if (totalPages <= 1) {
+        pagination.innerHTML = ''; return;
+    }
     let pagHTML = '<nav><ul class="pagination justify-content-center">';
     for (let i = 1; i <= totalPages; i++) {
         pagHTML += `<li class="page-item ${i === page ? 'active' : ''}">
@@ -114,7 +116,11 @@ window.changePage = (page) => {
 
 // ======== الأدمن ========
 function initAdmin() {
-    document.getElementById("login-form").onsubmit = e => {
+    const loginForm = document.getElementById("login-form");
+    const addForm = document.getElementById("add-form");
+
+    // تسجيل الدخول
+    loginForm.addEventListener("submit", e => {
         e.preventDefault();
         const user = document.getElementById("username").value.trim();
         const pass = document.getElementById("password").value;
@@ -122,10 +128,14 @@ function initAdmin() {
             document.getElementById("login-box").classList.add("d-none");
             document.getElementById("admin-panel").classList.remove("d-none");
             loadAdmin();
-        } else showToast("بيانات خاطئة", "danger");
-    };
+            showToast("أهلاً يا أدمن");
+        } else {
+            showToast("بيانات خاطئة", "danger");
+        }
+    });
 
-    document.getElementById("add-form").onsubmit = e => {
+    // إضافة منتج
+    addForm.addEventListener("submit", e => {
         e.preventDefault();
         const name = document.getElementById("name").value.trim();
         const image = document.getElementById("image").value.trim();
@@ -134,12 +144,12 @@ function initAdmin() {
 
         if (!name || !image) return showToast("الاسم ورابط الصورة مطلوبين", "danger");
 
-        const newProduct = { name, image, desc, price, id: Date.now() };
+        const newProduct = { name, image, desc, price, id: Date.now().toString() };
         allProducts.push(newProduct);
         saveToFirebase();
-        e.target.reset();
-        showToast("تم الإضافة! الكل شايف دلوقتي");
-    };
+        addForm.reset();
+        showToast("تم الإضافة عند الكل");
+    });
 }
 
 function loadAdmin() {
@@ -176,25 +186,35 @@ window.saveEdit = () => {
     allProducts[editIndex] = { ...allProducts[editIndex], name, image, desc, price };
     saveToFirebase();
     bootstrap.Modal.getInstance(document.getElementById("editModal")).hide();
-    showToast("تم التعديل عند الكل!");
+    loadAdmin();
+    showToast("تم التعديل عند الكل");
 };
 
 window.deleteProduct = (id) => {
-    if (confirm("متأكد؟")) {
+    if (confirm("متأكد من الحذف؟")) {
         allProducts = allProducts.filter(p => p.id !== id);
         saveToFirebase();
+        loadAdmin();
         showToast("تم الحذف عند الجميع", "danger");
     }
 };
 
+// Toast
 function showToast(msg, type = "success") {
-    const toast = document.createElement("div");
-    toast.className = `toast align-items-center text-bg-${type} border-0`;
-    toast.innerHTML = `<div class="d-flex"><div class="toast-body">${msg}</div>
-        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
-    </div>`;
     const container = document.body.appendChild(document.createElement("div"));
     container.className = "toast-container position-fixed bottom-0 end-0 p-3";
+    container.style.zIndex = "9999";
+
+    const toast = document.createElement("div");
+    toast.className = `toast align-items-center text-bg-${type} border-0`;
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">${msg}</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    `;
     container.appendChild(toast);
-    new bootstrap.Toast(toast, { delay: 3000 }).show();
+    const bsToast = new bootstrap.Toast(toast, { delay: 3000 });
+    bsToast.show();
+    toast.addEventListener("hidden.bs.toast", () => container.remove());
 }
